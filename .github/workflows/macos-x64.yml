@@ -27,8 +27,13 @@ jobs:
       - name: Adapt build args for Liberica NIK 25
         # NIK 25.0.5 still hits oracle/graal#13316 when --exact-reachability-metadata
         # meets conditional bulk queries. The check is diagnostic-only; drop it so
-        # the native image can be produced.
-        run: sed -i '' '/--exact-reachability-metadata/d' desktop-host/pom.xml
+        # the native image can be produced. Also keep main() on the primordial
+        # thread: GLFW on macOS requires NSThread.isMainThread, while NIK defaults
+        # to RunMainInNewThread=true.
+        run: |
+          sed -i '' '/--exact-reachability-metadata/d' desktop-host/pom.xml
+          perl -0pi -e 's|<buildArgs>|<buildArgs>\n                            <buildArg>-H:-RunMainInNewThread</buildArg>|' desktop-host/pom.xml
+          grep -n "RunMainInNewThread" desktop-host/pom.xml
 
       - name: Install Liberica NIK 25 (macOS x86-64)
         run: |
