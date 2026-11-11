@@ -1,0 +1,74 @@
+name: macOS x64 (Intel) build
+
+# Upstream publishes an Apple Silicon DMG only. This workflow builds the same
+# native QPlayer bundle on GitHub's Intel macOS runner. GraalVM CE no longer
+# ships a macOS x86-64 JDK after 25.0.1, so the build uses BellSoft Liberica
+# NIK 25, which still provides a macOS amd64 `native-image`.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos-x64:
+    runs-on: macos-15-intel
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '13.0'
+      QPLAYER_VERSION: '2.0.0-rc.2'
+      NIK_URL: 'https://download.bell-sw.com/vm/25.0.5.0.3/bellsoft-liberica-vm-openjdk25.0.5.0.3+6-25.0.5.0.3+1-macos-amd64.tar.gz'
+    steps:
+      - name: Check out the v2.0.0-rc.2 source
+        uses: actions/checkout@v5
+        with:
+          ref: v2.0.0-rc.2
+
+      - name: Install Liberica NIK 25 (macOS x86-64)
+        run: |
+          curl -fL --retry 5 --retry-delay 3 -o "$RUNNER_TEMP/nik.tar.gz" "$NIK_URL"
+          mkdir -p "$RUNNER_TEMP/nik"
+          tar -xzf "$RUNNER_TEMP/nik.tar.gz" -C "$RUNNER_TEMP/nik" --strip-components=1
+          rm -f "$RUNNER_TEMP/nik.tar.gz"
+          echo "JAVA_HOME=$RUNNER_TEMP/nik/Contents/Home" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/nik/Contents/Home/bin" >> "$GITHUB_PATH"
+
+      - name: Show toolchain
+        run: |
+          uname -m
+          java -version
+          native-image --version
+          mvn -version
+
+      - name: Cache Maven repository
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-m2-desktop-x64-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2-desktop-x64-
+
+      - name: Install player-core
+        run: mvn -B -DskipTests -pl player-core -am install
+
+      - name: Compile native app and bundled QML
+        run: |
+          mvn -B -DskipTests -Dqplayer.app.version="${QPLAYER_VERSION}" \
+            -pl desktop-host -am -Pdist package
+
+      - name: Smoke native AOT factories and reachability
+        run: desktop-host/target/qplayer --build-smoke
+
+      - name: Package DMG
+        run: bash desktop-host/dist/package-macos.sh
+
+      - name: Stage artifact
+        run: |
+          mkdir -p out
+          cp desktop-host/target/QPlayer.dmg out/QPlayer-macos-x64.dmg
+          ls -lh out
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: QPlayer-macos-x64
+          path: out/QPlayer-macos-x64.dmg
+          if-no-files-found: error
