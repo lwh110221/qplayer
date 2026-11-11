@@ -1,9 +1,8 @@
 name: macOS x64 (Intel) build
 
-# Upstream publishes an Apple Silicon DMG only. This workflow builds the same
-# native QPlayer bundle on GitHub's Intel macOS runner. GraalVM CE no longer
-# ships a macOS x86-64 JDK after 25.0.1, so the build uses BellSoft Liberica
-# NIK 25, which still provides a macOS amd64 `native-image`.
+# Upstream publishes an Apple Silicon DMG only. GraalVM CE stopped shipping a
+# macOS x86-64 JDK after 25.0.1, so this workflow pins that last x64 release to
+# build the same native QPlayer bundle on GitHub's Intel macOS runner.
 
 on:
   workflow_dispatch:
@@ -17,32 +16,31 @@ jobs:
     env:
       MACOSX_DEPLOYMENT_TARGET: '13.0'
       QPLAYER_VERSION: '2.0.0-rc.2'
-      NIK_URL: 'https://download.bell-sw.com/vm/25.0.5.0.3/bellsoft-liberica-vm-openjdk25.0.5.0.3+6-25.0.5.0.3+1-macos-amd64.tar.gz'
+      GRAAL_URL: 'https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-25.0.1/graalvm-community-jdk-25.0.1_macos-x64_bin.tar.gz'
     steps:
       - name: Check out the v2.0.0-rc.2 source
         uses: actions/checkout@v5
         with:
           ref: v2.0.0-rc.2
 
-      - name: Adapt build args for Liberica NIK 25
-        # NIK 25.0.5 still hits oracle/graal#13316 when --exact-reachability-metadata
-        # meets conditional bulk queries. The check is diagnostic-only; drop it so
-        # the native image can be produced. Also keep main() on the primordial
-        # thread: GLFW on macOS requires NSThread.isMainThread, while NIK defaults
-        # to RunMainInNewThread=true.
+      - name: Adapt build args
+        # --exact-reachability-metadata trips oracle/graal#13316 on the 25.0.x
+        # native-image line (conditional bulk queries). The check is diagnostic
+        # only, so drop it. Keep main() on the primordial thread, which macOS
+        # GLFW requires.
         run: |
           sed -i '' '/--exact-reachability-metadata/d' desktop-host/pom.xml
           perl -0pi -e 's|<buildArgs>|<buildArgs>\n                            <buildArg>-H:-RunMainInNewThread</buildArg>|' desktop-host/pom.xml
-          grep -n "RunMainInNewThread" desktop-host/pom.xml
 
-      - name: Install Liberica NIK 25 (macOS x86-64)
+      - name: Install GraalVM CE 25.0.1 (last macOS x86-64 build)
         run: |
-          curl -fL --retry 5 --retry-delay 3 -o "$RUNNER_TEMP/nik.tar.gz" "$NIK_URL"
-          mkdir -p "$RUNNER_TEMP/nik"
-          tar -xzf "$RUNNER_TEMP/nik.tar.gz" -C "$RUNNER_TEMP/nik" --strip-components=1
-          rm -f "$RUNNER_TEMP/nik.tar.gz"
-          echo "JAVA_HOME=$RUNNER_TEMP/nik/Contents/Home" >> "$GITHUB_ENV"
-          echo "$RUNNER_TEMP/nik/Contents/Home/bin" >> "$GITHUB_PATH"
+          curl -fL --retry 5 --retry-delay 3 -o "$RUNNER_TEMP/graal.tar.gz" "$GRAAL_URL"
+          mkdir -p "$RUNNER_TEMP/graal"
+          tar -xzf "$RUNNER_TEMP/graal.tar.gz" -C "$RUNNER_TEMP/graal" --strip-components=1
+          rm -f "$RUNNER_TEMP/graal.tar.gz"
+          GRAAL_HOME="$(find "$RUNNER_TEMP/graal" -type d -path '*/Contents/Home' | head -1)"
+          echo "JAVA_HOME=$GRAAL_HOME" >> "$GITHUB_ENV"
+          echo "$GRAAL_HOME/bin" >> "$GITHUB_PATH"
 
       - name: Show toolchain
         run: |
