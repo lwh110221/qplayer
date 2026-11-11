@@ -24,6 +24,12 @@ jobs:
         with:
           ref: v2.0.0-rc.2
 
+      - name: Adapt build args for Liberica NIK 25
+        # NIK 25.0.5 still hits oracle/graal#13316 when --exact-reachability-metadata
+        # meets conditional bulk queries. The check is diagnostic-only; drop it so
+        # the native image can be produced.
+        run: sed -i '' '/--exact-reachability-metadata/d' desktop-host/pom.xml
+
       - name: Install Liberica NIK 25 (macOS x86-64)
         run: |
           curl -fL --retry 5 --retry-delay 3 -o "$RUNNER_TEMP/nik.tar.gz" "$NIK_URL"
@@ -66,6 +72,14 @@ jobs:
           mkdir -p out
           cp desktop-host/target/QPlayer.dmg out/QPlayer-macos-x64.dmg
           ls -lh out
+
+      - name: Upload native-image error report
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: svm-error-report
+          path: desktop-host/target/svm_err_*.md
+          if-no-files-found: ignore
 
       - uses: actions/upload-artifact@v6
         with:
