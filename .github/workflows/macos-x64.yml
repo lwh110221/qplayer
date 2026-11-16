@@ -15,13 +15,13 @@ jobs:
     runs-on: macos-15-intel
     env:
       MACOSX_DEPLOYMENT_TARGET: '13.0'
-      QPLAYER_VERSION: '2.0.0-rc.2'
+      QPLAYER_VERSION: '2.1.1'
       GRAAL_URL: 'https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-25.0.1/graalvm-community-jdk-25.0.1_macos-x64_bin.tar.gz'
     steps:
-      - name: Check out the v2.0.0-rc.2 source
+      - name: Check out the v2.1.1 source
         uses: actions/checkout@v5
         with:
-          ref: v2.0.0-rc.2
+          ref: v2.1.1
 
       - name: Adapt build args
         # --exact-reachability-metadata trips oracle/graal#13316 on the 25.0.x
